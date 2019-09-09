@@ -27,7 +27,8 @@ lint:
 	tox -elint
 
 lint-roll:
-	isort --recursive <MODULE_NAME> tests
+	isort --recursive trio_run_in_process tests
+	black trio_run_in_process tests
 	$(MAKE) lint
 
 test:

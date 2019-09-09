@@ -1,6 +1,6 @@
-<MODULE_NAME>
-<PYPI_NAME>
-<REPO_NAME>
-<RTD_NAME>
-<PROJECT_NAME>
-<SHORT_DESCRIPTION>
+trio_run_in_process
+trio-run-in-process
+trio-run-in-process
+trio-run-in-process
+Trio `run_in_process`
+Trio based API for running code in a separate process

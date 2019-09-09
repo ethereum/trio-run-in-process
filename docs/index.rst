@@ -1,7 +1,7 @@
-<PROJECT_NAME>
+Trio `run_in_process`
 ==============================
 
-<SHORT_DESCRIPTION>
+Trio based API for running code in a separate process
 
 Contents
 --------
@@ -9,7 +9,7 @@ Contents
 .. toctree::
     :maxdepth: 3
 
-    <MODULE_NAME>
+    trio_run_in_process
     releases
 
 

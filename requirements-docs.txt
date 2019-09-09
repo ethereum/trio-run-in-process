@@ -1,1 +1,1 @@
-<PYPI_NAME>[doc]
+trio-run-in-process[doc]

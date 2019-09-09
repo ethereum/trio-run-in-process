@@ -1,4 +1,4 @@
 
 
 def test_import():
-    import <MODULE_NAME>  # noqa: F401
+    import trio_run_in_process  # noqa: F401

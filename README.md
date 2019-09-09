@@ -1,25 +1,25 @@
-# <PROJECT_NAME>
+# Trio `run_in_process`
 
-[![Join the chat at https://gitter.im/ethereum/<REPO_NAME>](https://badges.gitter.im/ethereum/<REPO_NAME>.svg)](https://gitter.im/ethereum/<REPO_NAME>?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://circleci.com/gh/ethereum/<REPO_NAME>.svg?style=shield)](https://circleci.com/gh/ethereum/<REPO_NAME>)
-[![PyPI version](https://badge.fury.io/py/<PYPI_NAME>.svg)](https://badge.fury.io/py/<PYPI_NAME>)
-[![Python versions](https://img.shields.io/pypi/pyversions/<PYPI_NAME>.svg)](https://pypi.python.org/pypi/<PYPI_NAME>)
-[![Docs build](https://readthedocs.org/projects/<RTD_NAME>/badge/?version=latest)](http://<RTD_NAME>.readthedocs.io/en/latest/?badge=latest)
+[![Join the chat at https://gitter.im/ethereum/trio-run-in-process](https://badges.gitter.im/ethereum/trio-run-in-process.svg)](https://gitter.im/ethereum/trio-run-in-process?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://circleci.com/gh/ethereum/trio-run-in-process.svg?style=shield)](https://circleci.com/gh/ethereum/trio-run-in-process)
+[![PyPI version](https://badge.fury.io/py/trio-run-in-process.svg)](https://badge.fury.io/py/trio-run-in-process)
+[![Python versions](https://img.shields.io/pypi/pyversions/trio-run-in-process.svg)](https://pypi.python.org/pypi/trio-run-in-process)
+[![Docs build](https://readthedocs.org/projects/trio-run-in-process/badge/?version=latest)](http://trio-run-in-process.readthedocs.io/en/latest/?badge=latest)
    
 
-<SHORT_DESCRIPTION>
+Trio based API for running code in a separate process
 
-Read more in the [documentation on ReadTheDocs](https://<RTD_NAME>.readthedocs.io/). [View the change log](https://<RTD_NAME>.readthedocs.io/en/latest/releases.html).
+Read more in the [documentation on ReadTheDocs](https://trio-run-in-process.readthedocs.io/). [View the change log](https://trio-run-in-process.readthedocs.io/en/latest/releases.html).
 
 ## Quickstart
 
 ```sh
-pip install <PYPI_NAME>
+pip install trio-run-in-process
 ```
 
 ## Developer Setup
 
-If you would like to hack on <REPO_NAME>, please check out the [Snake Charmers
+If you would like to hack on trio-run-in-process, please check out the [Snake Charmers
 Tactical Manual](https://github.com/ethereum/snake-charmers-tactical-manual)
 for information on how we do:
 
@@ -33,8 +33,8 @@ for information on how we do:
 You can set up your dev environment with:
 
 ```sh
-git clone git@github.com:ethereum/<REPO_NAME>.git
-cd <REPO_NAME>
+git clone git@github.com:ethereum/trio-run-in-process.git
+cd trio-run-in-process
 virtualenv -p python3 venv
 . venv/bin/activate
 pip install -e .[dev]
@@ -48,7 +48,7 @@ Show flake8 errors on file change:
 
 ```sh
 # Test flake8
-when-changed -v -s -r -1 <MODULE_NAME>/ tests/ -c "clear; flake8 <MODULE_NAME> tests && echo 'flake8 success' || echo 'error'"
+when-changed -v -s -r -1 trio_run_in_process/ tests/ -c "clear; flake8 trio_run_in_process tests && echo 'flake8 success' || echo 'error'"
 ```
 
 Run multi-process tests in one command, but without color:
@@ -64,7 +64,7 @@ Run in one thread, with color and desktop notifications:
 
 ```sh
 cd venv
-ptw --onfail "notify-send -t 5000 'Test failure ⚠⚠⚠⚠⚠' 'python 3 test on <REPO_NAME> failed'" ../tests ../<MODULE_NAME>
+ptw --onfail "notify-send -t 5000 'Test failure ⚠⚠⚠⚠⚠' 'python 3 test on trio-run-in-process failed'" ../tests ../trio_run_in_process
 ```
 
 ### Release setup
