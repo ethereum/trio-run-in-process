@@ -1,22 +1,22 @@
 from abc import ABC, abstractmethod
-from typing import Awaitable, Optional
+from typing import Generic, Optional
 
 from .state import State
 from .typing import TReturn
 
 
-class ProcessAPI(ABC, Awaitable[TReturn]):
+class ProcessAPI(ABC, Generic[TReturn]):
     #
     # State
     #
     @property
+    @abstractmethod
     def state(self) -> State:
         ...
 
     @state.setter
-    @abstractmethod
     def state(self, value: State) -> State:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def wait_for_state(self, state: State) -> None:
@@ -26,13 +26,13 @@ class ProcessAPI(ABC, Awaitable[TReturn]):
     # PID
     #
     @property
+    @abstractmethod
     def pid(self) -> int:
         ...
 
     @pid.setter
-    @abstractmethod
     def pid(self, value: int) -> None:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def wait_pid(self) -> int:
@@ -42,29 +42,29 @@ class ProcessAPI(ABC, Awaitable[TReturn]):
     # Return Value
     #
     @property
-    def return_value(self) -> int:
+    @abstractmethod
+    def return_value(self) -> TReturn:
         ...
 
     @return_value.setter
-    @abstractmethod
-    def return_value(self, value: int) -> None:
-        ...
+    def return_value(self, value: TReturn) -> None:
+        raise NotImplementedError
 
     @abstractmethod
-    async def wait_return_value(self) -> int:
+    async def wait_return_value(self) -> TReturn:
         ...
 
     #
     # Return Code
     #
     @property
+    @abstractmethod
     def returncode(self) -> int:
         ...
 
     @returncode.setter
-    @abstractmethod
     def returncode(self, value: int) -> None:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def wait_returncode(self) -> int:
@@ -74,16 +74,16 @@ class ProcessAPI(ABC, Awaitable[TReturn]):
     # Error
     #
     @property
-    def error(self) -> int:
+    @abstractmethod
+    def error(self) -> Optional[BaseException]:
         ...
 
     @error.setter
-    @abstractmethod
-    def error(self, value: int) -> None:
-        ...
+    def error(self, value: BaseException) -> None:
+        raise NotImplementedError
 
     @abstractmethod
-    async def wait_error(self) -> int:
+    async def wait_error(self) -> Optional[BaseException]:
         ...
 
     #

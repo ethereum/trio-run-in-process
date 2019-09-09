@@ -57,7 +57,10 @@ setup(
     url='https://github.com/ethereum/trio-run-in-process',
     include_package_data=True,
     install_requires=[
-        "eth-utils>=1,<2",
+        "async-generator>=1.10,<2",
+        "cloudpickle>=1.2.1,<2",
+        "trio>=0.12.1,<0.13",
+        "trio-typing>=0.2.0,<0.3.0",
     ],
     python_requires='>=3.6, <4',
     extras_require=extras_require,

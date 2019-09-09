@@ -1,8 +1,7 @@
 import pytest
-
 import trio
 
-from trio_run_in_process import open_in_process, State
+from trio_run_in_process import State, open_in_process
 
 
 @pytest.mark.trio

@@ -1,5 +1,4 @@
 import pytest
-
 import trio
 
 from trio_run_in_process import run_in_process
