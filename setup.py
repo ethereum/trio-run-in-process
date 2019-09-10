@@ -48,7 +48,7 @@ with open('./README.md') as readme:
 setup(
     name='trio-run-in-process',
     # *IMPORTANT*: Don't manually change the version here. Use `make bump`, as described in readme
-    version='0.1.0-alpha.0',
+    version='0.1.0-alpha.1',
     description="""trio-run-in-process: Trio based API for running code in a separate process""",
     long_description=long_description,
     long_description_content_type='text/markdown',
