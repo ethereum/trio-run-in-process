@@ -1,4 +1,3 @@
 from typing import TypeVar
 
-
-TReturn = TypeVar('TReturn')
+TReturn = TypeVar("TReturn")

@@ -1,33 +1,25 @@
 import os
 import signal
-from typing import (
-    Callable,
-    Optional,
-    Sequence,
-)
+from typing import Callable, Optional, Sequence
 
 import trio
 
 from .abc import ProcessAPI
 from .exceptions import ProcessKilled
-from .typing import TReturn
 from .state import State
+from .typing import TReturn
 
 
-class empty:
-    pass
-
-
-class Process(ProcessAPI):
-    returncode: Optional[int] = None
-
+class Process(ProcessAPI[TReturn]):
     _pid: Optional[int] = None
     _returncode: Optional[int] = None
-    _return_value: Optional[TReturn] = empty
+    _return_value: TReturn
     _error: Optional[BaseException] = None
     _state: State = State.INITIALIZING
 
-    def __init__(self, async_fn: Callable[..., TReturn], args: Sequence[TReturn]) -> None:
+    def __init__(
+        self, async_fn: Callable[..., TReturn], args: Sequence[TReturn]
+    ) -> None:
         self._async_fn = async_fn
         self._args = args
 
@@ -37,9 +29,6 @@ class Process(ProcessAPI):
         self._has_error = trio.Event()
         self._state_changed = trio.Event()
 
-    def __await__(self) -> TReturn:
-        return self.run().__await__()
-
     #
     # State
     #
@@ -48,7 +37,7 @@ class Process(ProcessAPI):
         return self._state
 
     @state.setter
-    def state(self, value: State) -> State:
+    def state(self, value: State) -> None:
         self._state = value
         self._state_changed.set()
         self._state_changed = trio.Event()
@@ -93,17 +82,17 @@ class Process(ProcessAPI):
     # Return Value
     #
     @property
-    def return_value(self) -> int:
-        if self._return_value is empty:
+    def return_value(self) -> TReturn:
+        if not hasattr(self, "_return_value"):
             raise AttributeError("No return_value set")
         return self._return_value
 
     @return_value.setter
-    def return_value(self, value: int) -> None:
+    def return_value(self, value: TReturn) -> None:
         self._return_value = value
         self._has_return_value.set()
 
-    async def wait_return_value(self) -> int:
+    async def wait_return_value(self) -> TReturn:
         await self._has_return_value.wait()
         return self.return_value
 
@@ -129,30 +118,32 @@ class Process(ProcessAPI):
     # Error
     #
     @property
-    def error(self) -> int:
-        if self._error is None and self._return_value is empty:
+    def error(self) -> Optional[BaseException]:
+        if self._error is None and not hasattr(self, "_return_value"):
             raise AttributeError("No error set")
         return self._error
 
     @error.setter
-    def error(self, value: int) -> None:
+    def error(self, value: BaseException) -> None:
         self._error = value
         self._has_error.set()
 
-    async def wait_error(self) -> int:
+    async def wait_error(self) -> BaseException:
         await self._has_error.wait()
-        return self.error
+        # mypy is unable to tell that `self.error` **must** be non-null in this
+        # case.
+        return self.error  # type: ignore
 
     #
     # Result
     #
     @property
     def result(self) -> TReturn:
-        if self._error is None and self._return_value is empty:
+        if self._error is None and not hasattr(self, "_return_value"):
             raise AttributeError("Process not done")
         elif self._error is not None:
             raise self._error
-        elif self._return_value is not empty:
+        elif hasattr(self, "_return_value"):
             return self._return_value
         else:
             raise BaseException("Code path should be unreachable")
