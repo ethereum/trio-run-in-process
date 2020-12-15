@@ -70,7 +70,7 @@ async def test_Process_object_wait_for_result_when_error():
     with trio.fail_after(2):
         async with open_in_process(raise_error) as proc:
             with pytest.raises(ValueError, match="child-error"):
-                await proc.wait_result()
+                await proc.wait_result_or_raise()
 
 
 @pytest.mark.trio
@@ -80,7 +80,7 @@ async def test_Process_object_wait_for_result_when_return_value():
 
     with trio.fail_after(2):
         async with open_in_process(return7) as proc:
-            result = await proc.wait_result()
+            result = await proc.wait_result_or_raise()
             assert result == 7
             assert proc.error is None
 

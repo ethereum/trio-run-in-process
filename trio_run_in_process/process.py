@@ -137,8 +137,12 @@ class Process(ProcessAPI[TReturn]):
     #
     # Result
     #
-    @property
-    def result(self) -> TReturn:
+    def get_result_or_raise(self) -> TReturn:
+        """
+        Return the computed result from the process, raising if it was an exception.
+
+        If the process has not finished then raises an `AttributeError`
+        """
         if self._error is None and not hasattr(self, "_return_value"):
             raise AttributeError("Process not done")
         elif self._error is not None:
@@ -148,7 +152,7 @@ class Process(ProcessAPI[TReturn]):
         else:
             raise BaseException("Code path should be unreachable")
 
-    async def wait_result(self) -> TReturn:
+    async def wait_result_or_raise(self) -> TReturn:
         """
         Block until the process has exited, either returning the return value
         if execution was successful, or raising an exception if it failed

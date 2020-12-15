@@ -89,13 +89,12 @@ class ProcessAPI(ABC, Generic[TReturn]):
     #
     # Result
     #
-    @property
     @abstractmethod
-    def result(self) -> TReturn:
+    def get_result_or_raise(self) -> TReturn:
         ...
 
     @abstractmethod
-    async def wait_result(self) -> TReturn:
+    async def wait_result_or_raise(self) -> TReturn:
         ...
 
     #

@@ -191,4 +191,4 @@ async def open_in_process(
 async def run_in_process(async_fn: Callable[..., TReturn], *args: Any) -> TReturn:
     async with open_in_process(async_fn, *args) as proc:
         await proc.wait()
-    return proc.result
+    return proc.get_result_or_raise()
