@@ -75,9 +75,6 @@ async def _do_async_fn(
 
             result = await async_fn(*args)
 
-            # state: STOPPING
-            update_state(to_parent, State.STOPPING)
-
             nursery.cancel_scope.cancel()
         return result
 
@@ -102,8 +99,6 @@ def _run_process(parent_pid: int, fd_read: int, fd_write: int) -> None:
             try:
                 result = trio.run(_do_async_fn, async_fn, args, to_parent)
             except BaseException as err:
-                # state: STOPPING
-                update_state(to_parent, State.STOPPING)
                 finished_payload = pickle_value(err)
                 raise
         except KeyboardInterrupt:
@@ -113,7 +108,6 @@ def _run_process(parent_pid: int, fd_read: int, fd_write: int) -> None:
         except BaseException:
             code = 1
         else:
-            # state: STOPPING (set from within _do_async_fn)
             finished_payload = pickle_value(result)
             code = 0
         finally:
