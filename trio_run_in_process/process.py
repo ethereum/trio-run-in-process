@@ -4,6 +4,7 @@ from typing import Callable, Optional, Sequence
 
 import trio
 
+from ._utils import pickle_value
 from .abc import ProcessAPI
 from .exceptions import ProcessKilled
 from .state import State
@@ -17,17 +18,23 @@ class Process(ProcessAPI[TReturn]):
     _error: Optional[BaseException] = None
     _state: State = State.INITIALIZING
 
+    sub_proc_payload: bytes
+
     def __init__(
         self, async_fn: Callable[..., TReturn], args: Sequence[TReturn]
     ) -> None:
         self._async_fn = async_fn
         self._args = args
+        self.sub_proc_payload = pickle_value((self._async_fn, self._args))
 
         self._has_pid = trio.Event()
         self._has_returncode = trio.Event()
         self._has_return_value = trio.Event()
         self._has_error = trio.Event()
         self._state_changed = trio.Event()
+
+    def __str__(self) -> str:
+        return f"Process[{self._async_fn}]"
 
     #
     # State
@@ -44,7 +51,7 @@ class Process(ProcessAPI[TReturn]):
 
     async def wait_for_state(self, state: State) -> None:
         """
-        Block until the process as reached the
+        Block until the process has reached or surpassed the given state.
         """
         if self.state.is_on_or_after(state):
             return

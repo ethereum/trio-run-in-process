@@ -12,7 +12,6 @@ from ._utils import (
     coro_read_exactly,
     coro_receive_pickled_value,
     get_subprocess_command,
-    pickle_value,
 )
 from .exceptions import InvalidState
 from .process import Process
@@ -22,7 +21,7 @@ from .typing import TReturn
 logger = logging.getLogger("trio-run-in-process")
 
 
-async def _monitor_sub_proc(
+async def _start_and_monitor_sub_proc(
     proc: Process[TReturn], sub_proc: trio.Process, parent_w: int
 ) -> None:
     logger.debug("starting subprocess to run %s", proc)
@@ -37,7 +36,7 @@ async def _monitor_sub_proc(
         logger.debug("writing execution data for %s over stdin", proc)
         # pass the child process the serialized `async_fn` and `args`
         async with trio.hazmat.FdStream(parent_w) as to_child:
-            await to_child.send_all(pickle_value((proc._async_fn, proc._args)))
+            await to_child.send_all(proc.sub_proc_payload)
 
         # this wait ensures that we
         with trio.fail_after(5):
@@ -139,14 +138,11 @@ async def open_in_process(
 
     sub_proc = await trio.open_process(
         command,
-        # stdin=subprocess.PIPE,
-        # stdout=subprocess.PIPE,
-        # stderr=subprocess.PIPE,
         pass_fds=(child_r, child_w),
     )
 
     async with trio.open_nursery() as nursery:
-        nursery.start_soon(_monitor_sub_proc, proc, sub_proc, parent_w)
+        nursery.start_soon(_start_and_monitor_sub_proc, proc, sub_proc, parent_w)
 
         async with trio.hazmat.FdStream(parent_r) as from_child:
             with trio.open_signal_receiver(*RELAY_SIGNALS) as signal_aiter:
