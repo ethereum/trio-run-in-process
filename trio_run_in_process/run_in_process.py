@@ -35,7 +35,7 @@ async def _start_and_monitor_sub_proc(
         # to wait for that data due to the round trip times between processes.
         logger.debug("writing execution data for %s over stdin", proc)
         # pass the child process the serialized `async_fn` and `args`
-        async with trio.hazmat.FdStream(parent_w) as to_child:
+        async with trio.lowlevel.FdStream(parent_w) as to_child:
             await to_child.send_all(proc.sub_proc_payload)
 
         # this wait ensures that we
@@ -67,7 +67,7 @@ async def _relay_signals(
 
 
 async def _monitor_state(
-    proc: Process[TReturn], from_child: trio.hazmat.FdStream
+    proc: Process[TReturn], from_child: trio.lowlevel.FdStream
 ) -> None:
     for current_state in State:
         if proc.state is not current_state:
@@ -144,7 +144,7 @@ async def open_in_process(
     async with trio.open_nursery() as nursery:
         nursery.start_soon(_start_and_monitor_sub_proc, proc, sub_proc, parent_w)
 
-        async with trio.hazmat.FdStream(parent_r) as from_child:
+        async with trio.lowlevel.FdStream(parent_r) as from_child:
             with trio.open_signal_receiver(*RELAY_SIGNALS) as signal_aiter:
                 # Monitor the child stream for incoming updates to the state of
                 # the child process.

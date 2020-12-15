@@ -8,16 +8,16 @@ from setuptools import (
 
 extras_require = {
     'test': [
-        "pytest==5.1.2",
-        "pytest-trio==0.5.2",
-        "pytest-xdist==1.29.0",
-        "tox>=2.9.1,<3",
+        "pytest==6.0.1",
+        "pytest-trio>=0.6.0,<0.7",
+        "pytest-xdist==2.0.0",
+        "tox==3.19.0",
     ],
     'lint': [
-        "black==19.3b0",
-        "flake8==3.4.1",
-        "isort>=4.2.15,<5",
-        "mypy==0.720",
+        "black==19.10b0",
+        "flake8==3.8.3",
+        "isort>=5.1.4,<6",
+        "mypy==0.782",
         "pydocstyle>=3.0.0,<4",
     ],
     'doc': [
@@ -59,8 +59,8 @@ setup(
     install_requires=[
         "async-generator>=1.10,<2",
         "cloudpickle>=1.2.1,<2",
-        "trio>=0.12.1,<0.13",
-        "trio-typing>=0.2.0,<0.3.0",
+        "trio>=0.16.0,<0.17",
+        "trio-typing>=0.5.0,<0.6",
     ],
     python_requires='>=3.6, <4',
     extras_require=extras_require,

@@ -61,7 +61,7 @@ async def _do_monitor_signals(signal_aiter: AsyncIterator[int]) -> None:
 async def _do_async_fn(
     async_fn: Callable[..., Awaitable[TReturn]],
     args: Sequence[Any],
-    to_parent: trio.hazmat.FdStream,
+    to_parent: BinaryIO,
 ) -> TReturn:
     with trio.open_signal_receiver(*SHUTDOWN_SIGNALS) as signal_aiter:
         # state: STARTED
