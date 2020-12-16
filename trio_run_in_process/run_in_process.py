@@ -8,6 +8,7 @@ import trio
 from trio.lowlevel import FdStream
 import trio_typing
 
+from . import constants
 from ._utils import (
     coro_read_exactly,
     coro_receive_pickled_value,
@@ -138,6 +139,12 @@ class WorkerProcess(WorkerProcessAPI):
             logger.debug("Writing execution data for %s over stdin", proc)
             await self._to_child.send_all(proc.sub_proc_payload)
 
+            startup_timeout = int(
+                os.getenv(
+                    "TRIO_RUN_IN_PROCESS_STARTUP_TIMEOUT",
+                    constants.STARTUP_TIMEOUT_SECONDS,
+                )
+            )
             with trio.open_signal_receiver(*RELAY_SIGNALS) as signal_aiter:
                 # Monitor the child stream for incoming updates to the state of
                 # the child process.
@@ -146,7 +153,8 @@ class WorkerProcess(WorkerProcessAPI):
                 # Relay any appropriate signals to the child process.
                 nursery.start_soon(_relay_signals, proc, signal_aiter)
 
-                await proc.wait_pid()
+                with trio.fail_after(startup_timeout):
+                    await proc.wait_pid()
 
                 # Wait until the child process has reached the EXECUTING
                 # state before yielding the context.  This ensures that any
@@ -155,7 +163,7 @@ class WorkerProcess(WorkerProcessAPI):
                 #
                 # The timeout ensures that if something is fundamentally wrong
                 # with the subprocess we don't hang indefinitely.
-                with trio.fail_after(5):
+                with trio.fail_after(startup_timeout):
                     await proc.wait_for_state(State.EXECUTING)
 
                 try:
