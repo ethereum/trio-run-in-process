@@ -1,4 +1,3 @@
-# import subprocess
 import logging
 import os
 import signal
@@ -6,6 +5,7 @@ from typing import Any, AsyncIterator, Callable
 
 from async_generator import asynccontextmanager
 import trio
+from trio.lowlevel import FdStream
 import trio_typing
 
 from ._utils import (
@@ -13,43 +13,13 @@ from ._utils import (
     coro_receive_pickled_value,
     get_subprocess_command,
 )
+from .abc import ProcessAPI, WorkerProcessAPI
 from .exceptions import InvalidState
 from .process import Process
 from .state import State
 from .typing import TReturn
 
 logger = logging.getLogger("trio-run-in-process")
-
-
-async def _start_and_monitor_sub_proc(
-    proc: Process[TReturn], sub_proc: trio.Process, parent_w: int
-) -> None:
-    logger.debug("starting subprocess to run %s", proc)
-    async with sub_proc:
-        # set the process ID
-        proc.pid = sub_proc.pid
-        logger.debug("subprocess for %s started.  pid=%d", proc, proc.pid)
-
-        # we write the execution data immediately without waiting for the
-        # `WAIT_EXEC_DATA` state to ensure that the child process doesn't have
-        # to wait for that data due to the round trip times between processes.
-        logger.debug("writing execution data for %s over stdin", proc)
-        # pass the child process the serialized `async_fn` and `args`
-        async with trio.lowlevel.FdStream(parent_w) as to_child:
-            await to_child.send_all(proc.sub_proc_payload)
-
-        # this wait ensures that we
-        with trio.fail_after(5):
-            await proc.wait_for_state(State.WAIT_EXEC_DATA)
-
-        with trio.fail_after(5):
-            await proc.wait_for_state(State.EXECUTING)
-        logger.debug("waiting for process %s finish", proc)
-
-    if sub_proc.returncode is None:
-        raise Exception("This shouldn't be possible")
-    proc.returncode = sub_proc.returncode
-    logger.debug("process %s finished: returncode=%d", proc, proc.returncode)
 
 
 async def _relay_signals(
@@ -66,9 +36,7 @@ async def _relay_signals(
         proc.send_signal(signum)
 
 
-async def _monitor_state(
-    proc: Process[TReturn], from_child: trio.lowlevel.FdStream
-) -> None:
+async def _monitor_state(proc: Process[TReturn], from_child: FdStream) -> None:
     for current_state in State:
         if proc.state is not current_state:
             raise InvalidState(
@@ -105,13 +73,12 @@ async def _monitor_state(
     if child_state is not State.FINISHED:
         raise InvalidState(f"Invalid final state: {proc.state}")
 
-    result = await coro_receive_pickled_value(from_child)
+    logger.debug("Reading process result for %s", proc)
+    proc.returncode, result = await coro_receive_pickled_value(from_child)
 
-    # The `returncode` should already be set but we do a quick wait to ensure
-    # that it will be set when we access it below.
-    with trio.fail_after(5):
-        await proc.wait_returncode()
-
+    logger.debug(
+        "Got result (%s) and returncode (%d) for %s", result, proc.returncode, proc
+    )
     if proc.returncode == 0:
         proc.return_value = result
     else:
@@ -127,60 +94,10 @@ RELAY_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 @trio_typing.takes_callable_and_args
 async def open_in_process(
     async_fn: Callable[..., TReturn], *args: Any
-) -> AsyncIterator[Process[TReturn]]:
-    proc = Process(async_fn, args)
-
-    parent_r, child_w = os.pipe()
-    child_r, parent_w = os.pipe()
-    parent_pid = os.getpid()
-
-    command = get_subprocess_command(child_r, child_w, parent_pid)
-
-    sub_proc = await trio.open_process(
-        command,
-        pass_fds=(child_r, child_w),
-    )
-
-    async with trio.open_nursery() as nursery:
-        nursery.start_soon(_start_and_monitor_sub_proc, proc, sub_proc, parent_w)
-
-        async with trio.lowlevel.FdStream(parent_r) as from_child:
-            with trio.open_signal_receiver(*RELAY_SIGNALS) as signal_aiter:
-                # Monitor the child stream for incoming updates to the state of
-                # the child process.
-                nursery.start_soon(_monitor_state, proc, from_child)
-
-                # Relay any appropriate signals to the child process.
-                nursery.start_soon(_relay_signals, proc, signal_aiter)
-
-                await proc.wait_pid()
-
-                # Wait until the child process has reached the STARTED
-                # state before yielding the context.  This ensures that any
-                # calls to things like `terminate` or `kill` will be handled
-                # properly in the child process.
-                #
-                # The timeout ensures that if something is fundamentally wrong
-                # with the subprocess we don't hang indefinitely.
-                with trio.fail_after(5):
-                    await proc.wait_for_state(State.STARTED)
-
-                try:
-                    yield proc
-                except KeyboardInterrupt as err:
-                    # If a keyboard interrupt is encountered relay it to the
-                    # child process and then give it a moment to cleanup before
-                    # re-raising
-                    try:
-                        proc.send_signal(signal.SIGINT)
-                        with trio.move_on_after(2):
-                            await proc.wait()
-                    finally:
-                        raise err
-
-                await proc.wait()
-
-                nursery.cancel_scope.cancel()
+) -> AsyncIterator[ProcessAPI[TReturn]]:
+    async with open_worker_process() as worker:
+        async with worker._open(async_fn, *args) as proc:
+            yield proc
 
 
 @trio_typing.takes_callable_and_args
@@ -188,3 +105,104 @@ async def run_in_process(async_fn: Callable[..., TReturn], *args: Any) -> TRetur
     async with open_in_process(async_fn, *args) as proc:
         await proc.wait()
     return proc.get_result_or_raise()
+
+
+class WorkerProcess(WorkerProcessAPI):
+    def __init__(
+        self, trio_process: trio.Process, from_child: FdStream, to_child: FdStream,
+    ) -> None:
+        self._trio_proc = trio_process
+        self._from_child = from_child
+        self._to_child = to_child
+        self._busy = False
+        self._dead = False
+
+    # This method is private because ProcessAPI methods can be used to kill the child process
+    # while the worker is still alive. If this ever needs to be made public we need to ensure the
+    # worker is flagged as dead when the child process is terminated.
+    @asynccontextmanager
+    async def _open(
+        self, async_fn: Callable[..., TReturn], *args: Any
+    ) -> AsyncIterator[ProcessAPI[TReturn]]:
+        if self._dead:
+            raise Exception("Worker is no longer active")
+        if self._busy:
+            raise Exception("Worker is busy")
+        self._busy = True
+        proc: Process[TReturn] = Process(async_fn, args)
+        proc.pid = self._trio_proc.pid
+        async with trio.open_nursery() as nursery:
+            # We write the execution data immediately without waiting for the
+            # `WAIT_EXEC_DATA` state to ensure that the child process doesn't have
+            # to wait for that data due to the round trip times between processes.
+            logger.debug("Writing execution data for %s over stdin", proc)
+            await self._to_child.send_all(proc.sub_proc_payload)
+
+            with trio.open_signal_receiver(*RELAY_SIGNALS) as signal_aiter:
+                # Monitor the child stream for incoming updates to the state of
+                # the child process.
+                nursery.start_soon(_monitor_state, proc, self._from_child)
+
+                # Relay any appropriate signals to the child process.
+                nursery.start_soon(_relay_signals, proc, signal_aiter)
+
+                await proc.wait_pid()
+
+                # Wait until the child process has reached the EXECUTING
+                # state before yielding the context.  This ensures that any
+                # calls to things like `terminate` or `kill` will be handled
+                # properly in the child process.
+                #
+                # The timeout ensures that if something is fundamentally wrong
+                # with the subprocess we don't hang indefinitely.
+                with trio.fail_after(5):
+                    await proc.wait_for_state(State.EXECUTING)
+
+                try:
+                    try:
+                        yield proc
+                    except KeyboardInterrupt as err:
+                        # If a keyboard interrupt is encountered relay it to the
+                        # child process and then give it a moment to cleanup before
+                        # re-raising
+                        try:
+                            proc.send_signal(signal.SIGINT)
+                            with trio.move_on_after(2):
+                                await proc.wait()
+                        finally:
+                            raise err
+                finally:
+                    await proc.wait()
+                    logger.debug(
+                        "process %s finished: returncode=%d", proc, proc.returncode
+                    )
+                    self._busy = False
+                    nursery.cancel_scope.cancel()
+
+    async def run(self, async_fn: Callable[..., TReturn], *args: Any) -> TReturn:
+        async with self._open(async_fn, *args) as proc:
+            return await proc.wait_result_or_raise()
+
+
+@asynccontextmanager
+async def open_worker_process() -> AsyncIterator[WorkerProcessAPI]:
+    """
+    Open a long-lived process that can be used multiple times to run async functions.
+
+    Concurrent calls to open() or run() are not allowed on the worker, and once the context is
+    left, it can no longer be used.
+    """
+    parent_r, child_w = os.pipe()
+    child_r, parent_w = os.pipe()
+    parent_pid = os.getpid()
+    trio_proc = await trio.open_process(
+        get_subprocess_command(child_r, child_w, parent_pid),
+        pass_fds=(child_r, child_w),
+    )
+    try:
+        async with trio_proc:
+            async with FdStream(parent_r) as from_child, FdStream(parent_w) as to_child:
+                worker = WorkerProcess(trio_proc, from_child, to_child)
+                yield worker
+    finally:
+        worker._dead = True

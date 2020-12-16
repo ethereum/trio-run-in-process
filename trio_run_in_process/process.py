@@ -34,7 +34,7 @@ class Process(ProcessAPI[TReturn]):
         self._state_changed = trio.Event()
 
     def __str__(self) -> str:
-        return f"Process[{self._async_fn}]"
+        return f"Process[{self._async_fn},args={self._args}]"
 
     #
     # State
@@ -193,8 +193,10 @@ class Process(ProcessAPI[TReturn]):
 
     def kill(self) -> None:
         self.send_signal(signal.SIGKILL)
-        self.status = State.FINISHED
-        self.error = ProcessKilled("Process terminated with SIGKILL")
+        self.state = State.FINISHED
+        if not self._has_returncode.is_set():
+            self.returncode = -signal.SIGKILL
+            self.error = ProcessKilled("Process terminated with SIGKILL")
 
     def terminate(self) -> None:
         self.send_signal(signal.SIGTERM)

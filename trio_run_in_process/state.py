@@ -7,12 +7,11 @@ class State(bytes, enum.Enum):
     """
 
     INITIALIZING = b"\x00"
-    INITIALIZED = b"\x01"
-    WAIT_EXEC_DATA = b"\x02"
-    BOOTING = b"\x03"
-    STARTED = b"\x04"
-    EXECUTING = b"\x05"
-    FINISHED = b"\x06"
+    WAIT_EXEC_DATA = b"\x01"
+    BOOTING = b"\x02"
+    STARTED = b"\x03"
+    EXECUTING = b"\x04"
+    FINISHED = b"\x05"
 
     def as_int(self) -> int:
         # mypy doesn't recognize `self.value` as being `bytes` type

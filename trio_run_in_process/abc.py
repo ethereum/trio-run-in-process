@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Generic, Optional
+from typing import Any, Callable, Generic, Optional
+
+from typing_extensions import AsyncContextManager
 
 from .state import State
 from .typing import TReturn
@@ -118,4 +120,16 @@ class ProcessAPI(ABC, Generic[TReturn]):
 
     @abstractmethod
     def send_signal(self, sig: int) -> None:
+        ...
+
+
+class WorkerProcessAPI(ABC):
+    @abstractmethod
+    def _open(
+        self, async_fn: Callable[..., TReturn], *args: Any
+    ) -> AsyncContextManager[ProcessAPI[TReturn]]:
+        ...
+
+    @abstractmethod
+    async def run(self, async_fn: Callable[..., TReturn], *args: Any) -> TReturn:
         ...

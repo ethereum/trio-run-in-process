@@ -8,7 +8,7 @@ import trio
 
 
 def get_subprocess_command(
-    child_r: int, child_w: int, parent_pid: int
+    child_r: int, child_w: int, parent_pid: int,
 ) -> Tuple[str, ...]:
     from . import _child
 

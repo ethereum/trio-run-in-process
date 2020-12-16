@@ -1,7 +1,7 @@
 import argparse
+import io
 import os
 import signal
-import sys
 from typing import Any, AsyncIterator, Awaitable, BinaryIO, Callable, Sequence
 
 import trio
@@ -64,13 +64,11 @@ async def _do_async_fn(
     to_parent: BinaryIO,
 ) -> TReturn:
     with trio.open_signal_receiver(*SHUTDOWN_SIGNALS) as signal_aiter:
-        # state: STARTED
         update_state(to_parent, State.STARTED)
 
         async with trio.open_nursery() as nursery:
             nursery.start_soon(_do_monitor_signals, signal_aiter)
 
-            # state: EXECUTING
             update_state(to_parent, State.EXECUTING)
 
             result = await async_fn(*args)
@@ -79,45 +77,43 @@ async def _do_async_fn(
         return result
 
 
-def _run_process(parent_pid: int, fd_read: int, fd_write: int) -> None:
-    """
-    Run the child process
-    """
-    # state: INITIALIZING
-    with os.fdopen(fd_write, "wb", closefd=True) as to_parent:
-        # state: INITIALIZED
-        update_state(to_parent, State.INITIALIZED)
-        with os.fdopen(fd_read, "rb", closefd=True) as from_parent:
-            # state: WAIT_EXEC_DATA
-            update_state(to_parent, State.WAIT_EXEC_DATA)
-            async_fn, args = sync_receive_pickled_value(from_parent)
+def _run_process(
+    parent_pid: int, from_parent: io.BytesIO, to_parent: io.BytesIO
+) -> None:
+    update_state(to_parent, State.WAIT_EXEC_DATA)
+    async_fn, args = sync_receive_pickled_value(from_parent)
 
-        # state: BOOTING
-        update_state(to_parent, State.BOOTING)
+    update_state(to_parent, State.BOOTING)
 
+    try:
         try:
-            try:
-                result = trio.run(_do_async_fn, async_fn, args, to_parent)
-            except BaseException as err:
-                finished_payload = pickle_value(err)
-                raise
-        except KeyboardInterrupt:
-            code = 2
-        except SystemExit as err:
-            code = err.args[0]
-        except BaseException:
-            code = 1
-        else:
-            finished_payload = pickle_value(result)
-            code = 0
-        finally:
-            # state: FINISHED
-            update_state_finished(to_parent, finished_payload)
-            sys.exit(code)
+            result: Any = trio.run(_do_async_fn, async_fn, args, to_parent)
+        except BaseException as err:
+            result = err
+            raise
+    except KeyboardInterrupt:
+        returncode = 2
+    except SystemExit as err:
+        returncode = err.args[0]
+    except BaseException:
+        returncode = 1
+    else:
+        returncode = 0
+    finally:
+        finished_payload = pickle_value((returncode, result))
+        update_state_finished(to_parent, finished_payload)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    _run_process(
-        parent_pid=args.parent_pid, fd_read=args.fd_read, fd_write=args.fd_write
-    )
+    with os.fdopen(args.fd_write, "wb", closefd=True) as to_parent, os.fdopen(
+        args.fd_read, "rb", closefd=True
+    ) as from_parent:
+        while True:
+            # When WorkerProcess exits it will close the pipe passed as fd_read here, sending us
+            # an EOF and causing a ConnectionError to bubble up here. That's how we know when to
+            # terminate.
+            try:
+                _run_process(args.parent_pid, from_parent, to_parent)
+            except ConnectionError:
+                break
