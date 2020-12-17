@@ -15,7 +15,7 @@ from ._utils import (
     get_subprocess_command,
 )
 from .abc import ProcessAPI, WorkerProcessAPI
-from .exceptions import InvalidState
+from .exceptions import InvalidDataFromChild, InvalidState, _UnpickleableValue
 from .process import Process
 from .state import State
 from .typing import TReturn
@@ -75,7 +75,16 @@ async def _monitor_state(proc: Process[TReturn], from_child: FdStream) -> None:
         raise InvalidState(f"Invalid final state: {proc.state}")
 
     logger.debug("Reading process result for %s", proc)
-    proc.returncode, result = await coro_receive_pickled_value(from_child)
+    try:
+        proc.returncode, result = await coro_receive_pickled_value(from_child)
+    except _UnpickleableValue as e:
+        result = InvalidDataFromChild(
+            "Unable to unpickle data from child. This may be a custom exception class; see "
+            "https://github.com/ethereum/trio-run-in-process/issues/11 for more details. "
+            "Original error: %s" % e.args
+        )
+        result.__cause__ = e
+        proc.returncode = 1
 
     logger.debug(
         "Got result (%s) and returncode (%d) for %s", result, proc.returncode, proc

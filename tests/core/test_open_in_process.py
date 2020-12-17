@@ -5,6 +5,7 @@ import pytest
 import trio
 
 from trio_run_in_process import ProcessKilled, open_in_process
+from trio_run_in_process.exceptions import InvalidDataFromChild
 
 
 @pytest.mark.trio
@@ -84,3 +85,24 @@ async def test_open_proc_outer_KeyboardInterrupt():
             async with open_in_process(sleep_forever) as proc:
                 raise KeyboardInterrupt
         assert proc.returncode == 2
+
+
+@pytest.mark.trio
+async def test_unpickleable_exc():
+    sleep = trio.sleep
+
+    # Custom exception classes requiring multiple arguments cannot be pickled:
+    # https://bugs.python.org/issue32696
+    class CustomException(BaseException):
+        def __init__(self, msg, arg2):
+            super().__init__(msg)
+            self.arg2 = arg2
+
+    async def raise_():
+        await sleep(0.01)
+        raise CustomException("msg", "arg2")
+
+    with trio.fail_after(2):
+        with pytest.raises(InvalidDataFromChild):
+            async with open_in_process(raise_) as proc:
+                await proc.wait_result_or_raise()

@@ -6,6 +6,8 @@ from typing import Any, Tuple
 import cloudpickle
 import trio
 
+from .exceptions import _UnpickleableValue
+
 
 def get_subprocess_command(
     child_r: int, child_w: int, parent_pid: int,
@@ -48,7 +50,10 @@ async def coro_receive_pickled_value(stream: trio.abc.ReceiveStream) -> Any:
     len_bytes = await coro_read_exactly(stream, 4)
     serialized_len = int.from_bytes(len_bytes, "big")
     serialized_result = await coro_read_exactly(stream, serialized_len)
-    return cloudpickle.loads(serialized_result)
+    try:
+        return cloudpickle.loads(serialized_result)
+    except BaseException as e:
+        raise _UnpickleableValue(*e.args) from e
 
 
 def sync_read_exactly(stream: io.BytesIO, num_bytes: int) -> bytes:
@@ -68,4 +73,7 @@ def sync_receive_pickled_value(stream: io.BytesIO) -> Any:
     len_bytes = sync_read_exactly(stream, 4)
     serialized_len = int.from_bytes(len_bytes, "big")
     serialized_result = sync_read_exactly(stream, serialized_len)
-    return cloudpickle.loads(serialized_result)
+    try:
+        return cloudpickle.loads(serialized_result)
+    except BaseException as e:
+        raise _UnpickleableValue(*e.args) from e
