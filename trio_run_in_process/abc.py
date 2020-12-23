@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Generic, Optional
+import uuid
 
 from typing_extensions import AsyncContextManager
 
@@ -124,11 +125,24 @@ class ProcessAPI(ABC, Generic[TReturn]):
 
 
 class WorkerProcessAPI(ABC):
+    @property
+    @abstractmethod
+    def pid(self) -> int:
+        ...
+
     @abstractmethod
     def _open(
         self, async_fn: Callable[..., TReturn], *args: Any
     ) -> AsyncContextManager[ProcessAPI[TReturn]]:
         ...
+
+    @abstractmethod
+    async def run(self, async_fn: Callable[..., TReturn], *args: Any) -> TReturn:
+        ...
+
+
+class WorkerPoolAPI(ABC):
+    id: uuid.UUID
 
     @abstractmethod
     async def run(self, async_fn: Callable[..., TReturn], *args: Any) -> TReturn:

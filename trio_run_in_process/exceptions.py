@@ -25,3 +25,7 @@ class InvalidDataFromChild(BaseRunInProcessException):
     This seems to happen only when the child raises a custom exception whose constructor has more
     than one required argument: https://github.com/ethereum/trio-run-in-process/issues/11
     """
+
+
+class WorkerPoolNotOpen(BaseRunInProcessException):
+    pass

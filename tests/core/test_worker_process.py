@@ -52,7 +52,7 @@ async def test_finished_worker_cannot_be_used():
         async with open_worker_process() as worker:
             await worker.run(trio.sleep, 0)
 
-        with pytest.raises(Exception, match="Worker is no longer active"):
+        with pytest.raises(Exception, match="Worker.* is no longer active"):
             await worker.run(trio.sleep, 0)
 
 
@@ -60,7 +60,7 @@ async def test_finished_worker_cannot_be_used():
 async def test_reentrance_is_not_allowed():
     with trio.fail_after(2):
         async with open_worker_process() as worker:
-            with pytest.raises(Exception, match="Worker is busy"):
+            with pytest.raises(Exception, match="Worker.* is busy"):
                 async with trio.open_nursery() as nursery:
                     nursery.start_soon(worker.run, trio.sleep, 1)
                     nursery.start_soon(worker.run, trio.sleep, 1)

@@ -1,7 +1,9 @@
+from contextlib import AsyncExitStack
 import logging
 import os
 import signal
 from typing import Any, AsyncIterator, Callable
+import uuid
 
 from async_generator import asynccontextmanager
 import trio
@@ -14,8 +16,13 @@ from ._utils import (
     coro_receive_pickled_value,
     get_subprocess_command,
 )
-from .abc import ProcessAPI, WorkerProcessAPI
-from .exceptions import InvalidDataFromChild, InvalidState, _UnpickleableValue
+from .abc import ProcessAPI, WorkerPoolAPI, WorkerProcessAPI
+from .exceptions import (
+    InvalidDataFromChild,
+    InvalidState,
+    WorkerPoolNotOpen,
+    _UnpickleableValue,
+)
 from .process import Process
 from .state import State
 from .typing import TReturn
@@ -127,6 +134,10 @@ class WorkerProcess(WorkerProcessAPI):
         self._busy = False
         self._dead = False
 
+    @property
+    def pid(self) -> int:
+        return self._trio_proc.pid
+
     # This method is private because ProcessAPI methods can be used to kill the child process
     # while the worker is still alive. If this ever needs to be made public we need to ensure the
     # worker is flagged as dead when the child process is terminated.
@@ -135,9 +146,9 @@ class WorkerProcess(WorkerProcessAPI):
         self, async_fn: Callable[..., TReturn], *args: Any
     ) -> AsyncIterator[ProcessAPI[TReturn]]:
         if self._dead:
-            raise Exception("Worker is no longer active")
+            raise Exception(f"Worker (pid={self.pid}) is no longer active")
         if self._busy:
-            raise Exception("Worker is busy")
+            raise Exception(f"Worker (pid={self.pid}) is busy")
         self._busy = True
         proc: Process[TReturn] = Process(async_fn, args)
         proc.pid = self._trio_proc.pid
@@ -223,3 +234,72 @@ async def open_worker_process() -> AsyncIterator[WorkerProcessAPI]:
                 yield worker
     finally:
         worker._dead = True
+
+
+class WorkerPool(WorkerPoolAPI):
+    def __init__(self, max_workers: int, id_: uuid.UUID = None) -> None:
+        if id_ is None:
+            self.id = uuid.uuid4()
+        else:
+            self.id = id_
+        self._max_workers = max_workers
+        self._num_workers = 0
+        self._send_channel, self._receive_channel = trio.open_memory_channel[
+            WorkerProcessAPI
+        ](max_workers)
+        self._exit_stack = AsyncExitStack()
+        self._is_open = False
+
+    def __str__(self) -> str:
+        return f"WorkerPool({self.id})"
+
+    @asynccontextmanager
+    async def _reserve_worker(self) -> AsyncIterator[WorkerProcessAPI]:
+        try:
+            worker = self._receive_channel.receive_nowait()
+        except trio.WouldBlock:
+            if self._num_workers < self._max_workers:
+                self._num_workers += 1
+                worker = await self._exit_stack.enter_async_context(
+                    open_worker_process()
+                )
+                logger.debug("%s: created new worker: pid=%d", self, worker.pid)
+            else:
+                logger.debug("%s: waiting for a busy worker to become free", self)
+                worker = await self._receive_channel.receive()
+
+        try:
+            yield worker
+        finally:
+            self._send_channel.send_nowait(worker)
+
+    async def run(self, async_fn: Callable[..., TReturn], *args: Any) -> TReturn:
+        async with self._reserve_worker() as worker:
+            if not self._is_open:
+                raise WorkerPoolNotOpen(f"{self} is not open")
+            logger.debug(
+                "%s: got free worker, running %s with args %s", self, async_fn, args
+            )
+            return await worker.run(async_fn, *args)
+
+    @asynccontextmanager
+    async def _open(self) -> AsyncIterator[WorkerPoolAPI]:
+        async with self._exit_stack:
+            self._is_open = True
+            try:
+                yield self
+            finally:
+                self._is_open = False
+
+
+@asynccontextmanager
+async def open_worker_pool(num_workers: int) -> AsyncIterator[WorkerPoolAPI]:
+    """
+    Open a pool of long-lived processes that can be used multiple times to run async functions.
+
+    Up to num_workers processes may be created, on demand, and if there are more concurrent calls
+    to WorkerPool.run() than num_workers, they will be queued and awaken in order as soon as a
+    worker becomes available.
+    """
+    async with WorkerPool(num_workers)._open() as pool:
+        yield pool
