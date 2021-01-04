@@ -83,8 +83,6 @@ def _run_process(
     update_state(to_parent, State.WAIT_EXEC_DATA)
     async_fn, args = sync_receive_pickled_value(from_parent)
 
-    update_state(to_parent, State.BOOTING)
-
     try:
         try:
             result: Any = trio.run(_do_async_fn, async_fn, args, to_parent)

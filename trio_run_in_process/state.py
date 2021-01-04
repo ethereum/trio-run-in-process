@@ -8,10 +8,9 @@ class State(bytes, enum.Enum):
 
     INITIALIZING = b"\x00"
     WAIT_EXEC_DATA = b"\x01"
-    BOOTING = b"\x02"
-    STARTED = b"\x03"
-    EXECUTING = b"\x04"
-    FINISHED = b"\x05"
+    STARTED = b"\x02"
+    EXECUTING = b"\x03"
+    FINISHED = b"\x04"
 
     def as_int(self) -> int:
         # mypy doesn't recognize `self.value` as being `bytes` type
