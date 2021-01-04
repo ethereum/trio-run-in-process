@@ -2,6 +2,7 @@ from contextlib import AsyncExitStack
 import logging
 import os
 import signal
+import sys
 from typing import Any, AsyncIterator, Callable
 import uuid
 
@@ -205,17 +206,46 @@ class WorkerProcess(WorkerProcessAPI):
                         # If a keyboard interrupt is encountered relay it to the
                         # child process and then give it a moment to cleanup before
                         # re-raising
+                        logger.debug(
+                            "Got KeyboardInterrupt, sending SIGINT to %s", proc
+                        )
                         try:
                             proc.send_signal(signal.SIGINT)
-                            with trio.move_on_after(2):
-                                await proc.wait()
+                            sigint_timeout = int(
+                                os.getenv(
+                                    "TRIO_RUN_IN_PROCESS_SIGINT_TIMEOUT",
+                                    constants.SIGINT_TIMEOUT_SECONDS,
+                                )
+                            )
+                            try:
+                                with trio.fail_after(sigint_timeout):
+                                    await proc.wait()
+                            except trio.TooSlowError:
+                                logger.debug(
+                                    "Timed out waiting for %s to exit after relaying SIGINT",
+                                    proc,
+                                )
                         finally:
                             raise err
+                    else:
+                        await proc.wait()
                 finally:
-                    await proc.wait()
-                    logger.debug(
-                        "process %s finished: returncode=%d", proc, proc.returncode
-                    )
+                    if not proc._has_returncode.is_set():
+                        # If the process has not returned at this stage we need to hard
+                        # kill it to prevent it from hanging.
+                        logger.warning(
+                            "%s failed to exit cleanly.  Sending SIGKILL",
+                            proc,
+                            # The `any` call is to include a stacktrace if this
+                            # happened due to an exception but to omit it if this is
+                            # somehow happening outside of an exception context.
+                            exc_info=any(sys.exc_info()),
+                        )
+                        proc.kill()
+                    else:
+                        logger.debug(
+                            "process %s finished: returncode=%d", proc, proc.returncode
+                        )
                     self._busy = False
                     nursery.cancel_scope.cancel()
 

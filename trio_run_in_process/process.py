@@ -34,7 +34,12 @@ class Process(ProcessAPI[TReturn]):
         self._state_changed = trio.Event()
 
     def __str__(self) -> str:
-        return f"Process[{self._async_fn},args={self._args}]"
+        func = self._async_fn.__name__
+        if self._has_pid.is_set():
+            pid = str(self.pid)
+        else:
+            pid = "<unset>"
+        return f"Process[{func},args={self._args},pid={pid}]"
 
     #
     # State
