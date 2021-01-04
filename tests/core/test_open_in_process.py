@@ -4,8 +4,10 @@ import signal
 import pytest
 import trio
 
-from trio_run_in_process import ProcessKilled, open_in_process
+from trio_run_in_process import ProcessKilled, constants, open_in_process
 from trio_run_in_process.exceptions import InvalidDataFromChild
+from trio_run_in_process.process import Process
+from trio_run_in_process.state import State
 
 
 @pytest.mark.trio
@@ -106,3 +108,42 @@ async def test_unpickleable_exc():
         with pytest.raises(InvalidDataFromChild):
             async with open_in_process(raise_) as proc:
                 await proc.wait_result_or_raise()
+
+
+@pytest.mark.trio
+async def test_timeout_waiting_for_pid(monkeypatch):
+    sleep = trio.sleep
+
+    async def wait_pid(self):
+        await sleep(constants.STARTUP_TIMEOUT_SECONDS + 0.1)
+
+    monkeypatch.setattr(Process, "wait_pid", wait_pid)
+    monkeypatch.setattr(constants, "STARTUP_TIMEOUT_SECONDS", 1)
+
+    async def do_sleep_forever():
+        while True:
+            await sleep(0.1)
+
+    with pytest.raises(trio.TooSlowError):
+        async with open_in_process(do_sleep_forever):
+            pass
+
+
+@pytest.mark.trio
+async def test_timeout_waiting_for_executing_state(monkeypatch):
+    sleep = trio.sleep
+
+    async def wait_for_state(self, state):
+        if state is State.EXECUTING:
+            await sleep(constants.STARTUP_TIMEOUT_SECONDS + 0.1)
+
+    monkeypatch.setattr(Process, "wait_for_state", wait_for_state)
+    monkeypatch.setattr(constants, "STARTUP_TIMEOUT_SECONDS", 1)
+
+    async def do_sleep_forever():
+        while True:
+            await sleep(0.1)
+
+    with pytest.raises(trio.TooSlowError):
+        async with open_in_process(do_sleep_forever):
+            pass

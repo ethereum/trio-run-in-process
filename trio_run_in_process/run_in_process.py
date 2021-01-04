@@ -173,8 +173,14 @@ class WorkerProcess(WorkerProcessAPI):
                 # Relay any appropriate signals to the child process.
                 nursery.start_soon(_relay_signals, proc, signal_aiter)
 
-                with trio.fail_after(startup_timeout):
-                    await proc.wait_pid()
+                try:
+                    with trio.fail_after(startup_timeout):
+                        await proc.wait_pid()
+                except trio.TooSlowError:
+                    proc.kill()
+                    raise trio.TooSlowError(
+                        f"{proc} took more than {startup_timeout} seconds to start up"
+                    )
 
                 # Wait until the child process has reached the EXECUTING
                 # state before yielding the context.  This ensures that any
@@ -183,8 +189,14 @@ class WorkerProcess(WorkerProcessAPI):
                 #
                 # The timeout ensures that if something is fundamentally wrong
                 # with the subprocess we don't hang indefinitely.
-                with trio.fail_after(startup_timeout):
-                    await proc.wait_for_state(State.EXECUTING)
+                try:
+                    with trio.fail_after(startup_timeout):
+                        await proc.wait_for_state(State.EXECUTING)
+                except trio.TooSlowError:
+                    proc.kill()
+                    raise trio.TooSlowError(
+                        f"{proc} took more than {startup_timeout} seconds to start up"
+                    )
 
                 try:
                     try:
